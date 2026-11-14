@@ -1908,13 +1908,7 @@ function drawObj(c,w,o,y,roadL,roadR,LW){
 
 /* ---------- حالة ---------- */
 /* ---------- المستخدمين والتقدّم (users.json + تقدّم كل مستخدم في المتصفح) ---------- */
-const FALLBACK_USERS=[
- {id:'u1',name:'أحمد',avatar:'🧔',color:'#0f6b5c',dailyGoal:50,examDate:null},
- {id:'u2',name:'منى',avatar:'👩',color:'#b5541c',dailyGoal:50,examDate:null},
- {id:'u3',name:'يوسف',avatar:'👦',color:'#1e5bb8',dailyGoal:30,examDate:null},
- {id:'u4',name:'سارة',avatar:'👧',color:'#6a4fb3',dailyGoal:30,examDate:null}
-];
-let USERS=FALLBACK_USERS, U=null, P=null, seen={};
+let USERS=[], U=null, P=null, seen={};
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 const dayStr=(off=0)=>{const d=new Date(); d.setDate(d.getDate()+off); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 const today=()=>dayStr(0);
@@ -2054,17 +2048,32 @@ function addMistake(x){ if(P.mistakes.some(m=>mKey(m)===mKey(x))) return; P.mist
 function fixMistake(x){ const n=P.mistakes.length; P.mistakes=P.mistakes.filter(m=>mKey(m)!==mKey(x)); if(P.mistakes.length<n){ P.fixed++; saveP(); } }
 
 /* ---------- اختيار المستخدم ---------- */
-function picker(noSync){
-  pushNow(); U=null; P=null; seen={};
-  app.innerHTML=`<h1>🚗 دليل القيادة – نورث كارولينا</h1>
-  <p class="sub">مين اللي هيذاكر النهارده؟</p>
-  <div class="who">${USERS.map(u=>{ const p=loadP(u.id), lv=levelOf(p.xp), st=liveStreak(p);
-    return `<button class="whoc" onclick="enter('${esc(u.id)}')"><span class="av xl" style="--c:${esc(u.color||'#0f6b5c')}">${esc(u.avatar||'🙂')}</span><b>${u.pin?'🔒 ':''}${esc(u.name)}</b>
-      <small>${p.xp?`${lv.t}`:'لسه ما بدأش'}</small><small>⭐ ${p.xp} · 🔥 ${st} · جاهزية ${readinessOf(p)}%</small></button>`; }).join('')}<button class="whoc add" onclick="userForm()"><span class="av xl" style="--c:var(--soft)">➕</span><b>مستخدم جديد</b><small>أول مرة هنا؟</small><small>اكتب اسمك وابدأ</small></button></div>
-  <p class="note">${syncTag()}</p>
-  <button class="ghost full" onclick="linkScreen()">${TOKEN?'☁️ إعدادات الربط':'🔗 اربط الجهاز عشان التقدّم يظهر على كل أجهزتك'}</button>`;
+function picker(){
+  pushNow(); U=null; P=null; seen={}; try{localStorage.removeItem('ncd_current')}catch(e){}
+  app.innerHTML='<h1>🚗 دليل القيادة – نورث كارولينا</h1><p class="sub">سجّل دخولك عشان تكمّل رحلتك من مكان ما وقفت.</p>'+
+  '<form class="tip uform" onsubmit="event.preventDefault();login()">'+
+  '<label for="lu" style="margin-top:0"><b>اسم المستخدم</b></label><input class="gsearch" id="lu" autocomplete="username" autocapitalize="none" spellcheck="false">'+
+  '<label for="lp"><b>الرقم السري</b></label><input class="gsearch" id="lp" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password">'+
+  '<div class="fb no" id="lmsg"></div><div class="row"><button class="primary" type="submit">ادخل ←</button></div></form>'+
+  '<button class="ghost full" onclick="userForm()">➕ أول مرة هنا؟ اعمل حساب جديد</button>'+
+  '<p class="note">'+syncTag()+'</p>'+
+  '<button class="ghost full" onclick="linkScreen()">'+(TOKEN?'☁️ إعدادات الربط':'🔗 اربط الجهاز عشان حسابك يظهر على كل أجهزتك')+'</button>';
   goTop();
-  if(TOKEN&&!noSync) Promise.all(USERS.map(u=>waitMax(pull(u.id),7000))).then(()=>{ setSync('ok'); if(!U&&app.querySelector('.who')) picker(true); }).catch(()=>setSync('err'));
+}
+const unameOf=u=>String(u.username||u.name).trim().toLowerCase();
+/* يجيب آخر قايمة مستخدمين من السحابة، ويحافظ على اللي لسه متسجل على الجهاز ده بس */
+async function refreshUsers(){ if(!TOKEN) return;
+  try{ const list=usersOf(await waitMax(ghRead('users.json'),7000)); USERS=list.concat(USERS.filter(u=>u.local&&!list.some(x=>x.id===u.id))); cacheUsers(); setSync('ok'); }catch(e){ setSync('err'); } }
+async function login(){
+  const m=document.getElementById('lmsg'), un=document.getElementById('lu').value.trim().toLowerCase(), pin=document.getElementById('lp').value.trim();
+  if(!un){ m.textContent='اكتب اسم المستخدم.'; return; }
+  m.className='fb'; m.textContent='⏳ لحظة…';
+  await refreshUsers();
+  const u=USERS.find(x=>unameOf(x)===un);
+  const ok=!!u && (u.pin ? (!!pin && await pinHash(u.id,pin)===u.pin) : true);
+  if(!ok){ const e=document.getElementById('lmsg'); if(e){ e.className='fb no'; e.textContent='اسم المستخدم أو الرقم السري مش صح.'+(TOKEN?'':' لو حسابك معمول على جهاز تاني، اربط الجهاز ده الأول.'); } return; }
+  await pickUser(u.id);
+  if(!u.pin) toast('حسابك من غير رقم سري. حط واحد من البروفايل 🔒');
 }
 
 /* ---------- الخطوة الجاية ---------- */
@@ -2142,8 +2151,8 @@ function profile(askReset){
   <h3 class="chh">📅 ميعاد امتحانك</h3>
   <div class="tip"><label for="examdate">لو حجزت ميعاد في الـ DMV، اكتبه هنا وهنعدّ معاك الأيام:</label>
     <input class="gsearch" style="margin:8px 0 0" type="date" id="examdate" value="${esc(P.examDate||'')}" onchange="P.examDate=this.value||null;saveP();toast('اتحفظ ✅')"></div>
-  <button class="ghost full" style="margin-top:14px" onclick="userForm(true)">✏️ عدّل اسمي وصورتي والرقم السري</button>
-  <div class="row"><button class="ghost" onclick="picker()">👥 غيّر المستخدم</button><button class="ghost" onclick="profile(true)">🗑️ امسح تقدّمي</button></div>
+  <button class="ghost full" style="margin-top:14px" onclick="userForm(true)">✏️ عدّل بياناتي والرقم السري</button>
+  <div class="row"><button class="ghost" onclick="picker()">🚪 تسجيل خروج</button><button class="ghost" onclick="profile(true)">🗑️ امسح تقدّمي</button></div>
   ${askReset?`<div class="tip" id="rst" style="margin-top:12px;border-color:var(--bad)"><b>متأكد؟</b> كل النجوم والأوسمة والتقدّم بتاع ${esc(U.name)} هيتمسحوا، ومش هينفع يرجعوا.
     <div class="row"><button class="ghost" onclick="profile()">لأ، سيبه</button><button class="primary" style="background:var(--bad)" onclick="resetMe()">أيوه، امسح</button></div></div>`:''}`;
   if(askReset){ const r=document.getElementById('rst'); if(r) r.scrollIntoView({block:'center'}); } else goTop();
@@ -2165,44 +2174,40 @@ async function upsertUser(u){
 }
 let FORM=null;
 function userForm(edit){
-  const u=edit?U:null; FORM={avatar:u?(u.avatar||AVATARS[0]):AVATARS[USERS.length%AVATARS.length],color:u?(u.color||COLORS[0]):COLORS[USERS.length%COLORS.length]};
+  const u=edit?U:null; FORM={avatar:u?(u.avatar||AVATARS[0]):AVATARS[0],color:u?(u.color||COLORS[0]):COLORS[0]};
   const goal=u?(u.dailyGoal||50):50;
-  app.innerHTML='<div class="top"><button class="ghost" onclick="'+(edit?'profile()':'picker(true)')+'">→ رجوع</button><h2>'+(edit?'عدّل بياناتك':'مستخدم جديد')+'</h2></div>'+
+  app.innerHTML='<div class="top"><button class="ghost" onclick="'+(edit?'profile()':'picker()')+'">→ رجوع</button><h2>'+(edit?'عدّل بياناتك':'حساب جديد')+'</h2></div>'+
   '<form class="tip uform" onsubmit="event.preventDefault();submitUser('+(edit?'true':'false')+')">'+
   '<span class="av xl" id="fav" style="--c:'+esc(FORM.color)+'">'+esc(FORM.avatar)+'</span>'+
-  '<label for="fname"><b>اسمك</b></label><input class="gsearch" id="fname" maxlength="20" value="'+esc(u?u.name:'')+'" placeholder="اكتب اسمك هنا" autocomplete="off">'+
+  '<label for="fname"><b>اسمك</b></label><input class="gsearch" id="fname" maxlength="20" value="'+esc(u?u.name:'')+'" placeholder="الاسم اللي هننده عليك بيه" autocomplete="off">'+
+  (edit?'<div class="src" style="text-align:right">اسم المستخدم: <b dir="ltr">'+esc(u.username||u.name)+'</b> (ما بيتغيّرش)</div>':
+   '<label for="fuser"><b>اسم المستخدم</b></label><input class="gsearch" id="fuser" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="مثلًا: mohamed88">'+
+   '<small>هتدخل بيه كل مرة. من 3 لـ 20 حرف أو رقم، من غير مسافات.</small>')+
+  '<label for="fpin"><b>'+(edit?'رقم سري جديد (اختياري)':'الرقم السري')+'</b></label><input class="gsearch" id="fpin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="'+(edit?'سيبه فاضي لو مش عايز تغيّره':'4 أرقام')+'">'+
+  (edit?'':'<small>احفظه كويس. هتحتاجه مع اسم المستخدم كل ما تسجّل دخول.</small>')+
   '<b>اختار صورة</b><div class="pick">'+AVATARS.map(a=>'<button type="button" class="pk '+(a===FORM.avatar?'on':'')+'" onclick="setF(\'avatar\',\''+a+'\',this)">'+a+'</button>').join('')+'</div>'+
   '<b>اختار لون</b><div class="pick">'+COLORS.map(c=>'<button type="button" class="pk col '+(c===FORM.color?'on':'')+'" style="background:'+c+'" aria-label="لون" onclick="setF(\'color\',\''+c+'\',this)"></button>').join('')+'</div>'+
   '<label for="fgoal"><b>هدفك اليومي</b></label><select class="gsearch" id="fgoal">'+[[30,'خفيف: 30 نجمة في اليوم'],[50,'متوسط: 50 نجمة في اليوم'],[80,'جامد: 80 نجمة في اليوم']].map(g=>'<option value="'+g[0]+'" '+(g[0]===goal?'selected':'')+'>'+g[1]+'</option>').join('')+'</select>'+
-  '<label for="fpin"><b>رقم سري (اختياري)</b></label><input class="gsearch" id="fpin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="'+(u&&u.pin?'سيبه فاضي لو مش عايز تغيّره':'4 أرقام')+'">'+
-  '<small>لو كتبت رقم سري، هيتطلب كل ما حد يختار بروفايلك. من غيره أي حد على الجهاز يقدر يدخل عليه.</small>'+
-  '<div class="fb no" id="fmsg"></div><div class="row"><button class="primary" type="submit">'+(edit?'احفظ':'ابدأ الرحلة ←')+'</button></div>'+
-  (edit&&u.pin?'<button type="button" class="ghost full" style="margin-top:10px" onclick="removePin()">🔓 شيل الرقم السري</button>':'')+'</form>';
+  '<div class="fb no" id="fmsg"></div><div class="row"><button class="primary" type="submit">'+(edit?'احفظ':'ابدأ الرحلة ←')+'</button></div></form>';
   goTop();
 }
 function setF(k,v,el){ FORM[k]=v; el.parentNode.querySelectorAll('.pk').forEach(b=>b.classList.toggle('on',b===el)); const a=document.getElementById('fav'); a.textContent=FORM.avatar; a.style.setProperty('--c',FORM.color); }
 async function submitUser(edit){
   const m=document.getElementById('fmsg'), name=document.getElementById('fname').value.trim().replace(/\s+/g,' '), pin=document.getElementById('fpin').value.trim(), goal=+document.getElementById('fgoal').value||50;
-  if(!name){ m.textContent='اكتب اسمك الأول.'; return; }
-  if(USERS.some(x=>x.name===name&&(!edit||x.id!==U.id))){ m.textContent='الاسم ده موجود قبل كده. لو ده انت، ارجع واختار بروفايلك.'; return; }
-  if(pin&&!/^\d{4}$/.test(pin)){ m.textContent='الرقم السري لازم يكون 4 أرقام بالظبط.'; return; }
+  const uname=edit?null:document.getElementById('fuser').value.trim();
+  const say=t=>{ const e=document.getElementById('fmsg'); if(e){ e.className='fb no'; e.textContent=t; } };
+  if(!name) return say('اكتب اسمك الأول.');
+  if(!edit && !/^[\p{L}\p{N}_.]{3,20}$/u.test(uname)) return say('اسم المستخدم لازم يكون من 3 لـ 20 حرف أو رقم، من غير مسافات.');
+  if(!edit && !/^\d{4}$/.test(pin)) return say('اختار رقم سري من 4 أرقام.');
+  if(edit && pin && !/^\d{4}$/.test(pin)) return say('الرقم السري لازم يكون 4 أرقام بالظبط.');
   m.className='fb'; m.textContent='⏳ بنحفظ…';
-  const u=edit?{...U}:{id:'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),examDate:null};
+  if(!edit){ await refreshUsers(); if(USERS.some(x=>unameOf(x)===uname.toLowerCase())) return say('اسم المستخدم ده متاخد. جرّب واحد تاني.'); }
+  const u=edit?{...U}:{id:'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),username:uname,examDate:null};
   delete u.local; u.name=name; u.avatar=FORM.avatar; u.color=FORM.color; u.dailyGoal=goal;
   if(pin) u.pin=await pinHash(u.id,pin);
   await upsertUser(u);
   if(edit){ U=USERS.find(x=>x.id===u.id)||u; toast('اتحفظ ✅'); profile(); } else pickUser(u.id);
 }
-async function removePin(){ const u={...U}; delete u.pin; delete u.local; await upsertUser(u); U=USERS.find(x=>x.id===u.id)||u; toast('الرقم السري اتشال'); profile(); }
-function enter(id){ const u=USERS.find(x=>x.id===id); if(u&&u.pin) pinScreen(id); else pickUser(id); }
-function pinScreen(id,msg){ const u=USERS.find(x=>x.id===id); if(!u) return picker(true);
-  app.innerHTML='<div class="top"><button class="ghost" onclick="picker(true)">→ رجوع</button><h2>🔒 دخول</h2></div>'+
-  '<form class="card" onsubmit="event.preventDefault();checkPin(\''+esc(id)+'\')"><span class="av xl" style="--c:'+esc(u.color||'#0f6b5c')+'">'+esc(u.avatar||'🙂')+'</span><div class="say">'+esc(u.name)+'</div>'+
-  '<label for="pin" class="src" style="display:block">اكتب رقمك السري</label><input class="gsearch pinin" id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off">'+
-  '<div class="fb no" id="pmsg">'+(msg||'')+'</div><div class="row"><button class="primary" type="submit">ادخل ←</button></div>'+
-  '<div class="src">نسيت الرقم؟ صاحب التول يقدر يشيله من ملف users.json في ريبو البيانات.</div></form>';
-  goTop(); const i=document.getElementById('pin'); if(i) i.focus(); }
-async function checkPin(id){ const u=USERS.find(x=>x.id===id), v=document.getElementById('pin').value.trim(); if(u&&v&&await pinHash(id,v)===u.pin) pickUser(id); else pinScreen(id,'الرقم مش صح. جرّب تاني.'); }
 async function boot(){
   let got=false, cache=[]; try{cache=usersOf(JSON.parse(localStorage.getItem('ncd_users')||'[]'))}catch(e){}
   if(TOKEN){ try{ const list=usersOf(await waitMax(ghRead('users.json'),6000));
@@ -2210,7 +2215,7 @@ async function boot(){
       const pend=cache.filter(u=>u.local); pend.forEach(u=>{ const c={...u}; delete c.local; const i=list.findIndex(y=>y.id===c.id); if(i>=0) list[i]=c; else list.push(c); });
       if(pend.length) await waitMax(ghWrite('users.json',{users:list},'users: sync'),9000);
       if(list.length){ USERS=list; got=true; } setSync('ok'); }catch(e){ setSync('err'); } }
-  if(!got){ if(cache.length) USERS=cache; else try{ const r=await waitMax(fetch('users.json',{cache:'no-store'}),3000); if(r.ok){ const list=usersOf(await r.json()); if(list.length) USERS=list; } }catch(e){} }
+  if(!got){ USERS=cache; }
   cacheUsers();
   let cur=null; try{cur=localStorage.getItem('ncd_current')}catch(e){}
   if(cur&&USERS.find(u=>u.id===cur)) pickUser(cur); else picker();

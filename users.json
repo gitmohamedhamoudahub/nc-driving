@@ -1,8 +1,0 @@
-{
-  "users": [
-    { "id": "u1", "name": "أحمد", "avatar": "🧔", "color": "#0f6b5c", "dailyGoal": 50, "examDate": null },
-    { "id": "u2", "name": "منى",  "avatar": "👩", "color": "#b5541c", "dailyGoal": 50, "examDate": null },
-    { "id": "u3", "name": "يوسف", "avatar": "👦", "color": "#1e5bb8", "dailyGoal": 30, "examDate": null },
-    { "id": "u4", "name": "سارة", "avatar": "👧", "color": "#6a4fb3", "dailyGoal": 30, "examDate": null }
-  ]
-}
