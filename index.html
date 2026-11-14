@@ -157,6 +157,12 @@
   @keyframes pop{from{transform:scale(.3);opacity:0}}
   .confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:70}
   .sync[data-s=ok]{color:var(--good)}.sync[data-s=err]{color:var(--bad)}
+  .whoc.add{border-style:dashed}
+  .uform label,.uform>b{display:block;margin-top:12px;font-size:17px}.uform .gsearch{margin:6px 0 0;background:#fff}
+  .pick{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .pk{min-height:0;width:48px;height:48px;padding:0;font-size:26px;line-height:1;background:#fff;border:2px solid var(--line);border-radius:14px}
+  .pk.on{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}.pk.col{border-radius:50%;border-color:transparent}.pk.col.on{border-color:#fff;box-shadow:0 0 0 3px var(--ink)}
+  .pinin{margin:10px auto 0;max-width:200px;display:block;text-align:center;font-size:26px;letter-spacing:.35em;direction:ltr}
   .gain{font-size:17px;font-weight:700;color:var(--accent);background:var(--soft);border-radius:12px;padding:8px 10px;margin-top:10px}
   button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   @media (prefers-reduced-motion: reduce){.toast,.celc .e,.blink{animation:none}}
@@ -2053,8 +2059,8 @@ function picker(noSync){
   app.innerHTML=`<h1>🚗 دليل القيادة – نورث كارولينا</h1>
   <p class="sub">مين اللي هيذاكر النهارده؟</p>
   <div class="who">${USERS.map(u=>{ const p=loadP(u.id), lv=levelOf(p.xp), st=liveStreak(p);
-    return `<button class="whoc" onclick="pickUser('${esc(u.id)}')"><span class="av xl" style="--c:${esc(u.color||'#0f6b5c')}">${esc(u.avatar||'🙂')}</span><b>${esc(u.name)}</b>
-      <small>${p.xp?`${lv.t}`:'لسه ما بدأش'}</small><small>⭐ ${p.xp} · 🔥 ${st} · جاهزية ${readinessOf(p)}%</small></button>`; }).join('')}</div>
+    return `<button class="whoc" onclick="enter('${esc(u.id)}')"><span class="av xl" style="--c:${esc(u.color||'#0f6b5c')}">${esc(u.avatar||'🙂')}</span><b>${u.pin?'🔒 ':''}${esc(u.name)}</b>
+      <small>${p.xp?`${lv.t}`:'لسه ما بدأش'}</small><small>⭐ ${p.xp} · 🔥 ${st} · جاهزية ${readinessOf(p)}%</small></button>`; }).join('')}<button class="whoc add" onclick="userForm()"><span class="av xl" style="--c:var(--soft)">➕</span><b>مستخدم جديد</b><small>أول مرة هنا؟</small><small>اكتب اسمك وابدأ</small></button></div>
   <p class="note">${syncTag()}</p>
   <button class="ghost full" onclick="linkScreen()">${TOKEN?'☁️ إعدادات الربط':'🔗 اربط الجهاز عشان التقدّم يظهر على كل أجهزتك'}</button>`;
   goTop();
@@ -2136,17 +2142,76 @@ function profile(askReset){
   <h3 class="chh">📅 ميعاد امتحانك</h3>
   <div class="tip"><label for="examdate">لو حجزت ميعاد في الـ DMV، اكتبه هنا وهنعدّ معاك الأيام:</label>
     <input class="gsearch" style="margin:8px 0 0" type="date" id="examdate" value="${esc(P.examDate||'')}" onchange="P.examDate=this.value||null;saveP();toast('اتحفظ ✅')"></div>
+  <button class="ghost full" style="margin-top:14px" onclick="userForm(true)">✏️ عدّل اسمي وصورتي والرقم السري</button>
   <div class="row"><button class="ghost" onclick="picker()">👥 غيّر المستخدم</button><button class="ghost" onclick="profile(true)">🗑️ امسح تقدّمي</button></div>
   ${askReset?`<div class="tip" id="rst" style="margin-top:12px;border-color:var(--bad)"><b>متأكد؟</b> كل النجوم والأوسمة والتقدّم بتاع ${esc(U.name)} هيتمسحوا، ومش هينفع يرجعوا.
     <div class="row"><button class="ghost" onclick="profile()">لأ، سيبه</button><button class="primary" style="background:var(--bad)" onclick="resetMe()">أيوه، امسح</button></div></div>`:''}`;
   if(askReset){ const r=document.getElementById('rst'); if(r) r.scrollIntoView({block:'center'}); } else goTop();
 }
 function resetMe(){ P=blankP(); seen=P.seen; saveP(); toast('اتمسح التقدّم'); home(); }
+/* ---------- تسجيل مستخدم جديد + رقم سري اختياري ---------- */
+const AVATARS=['🧔','👩','👦','👧','👨','🧕','👴','👵','🧑','👱','🧒','🚗'];
+const COLORS=['#0f6b5c','#b5541c','#1e5bb8','#6a4fb3','#c62828','#7a6a00'];
+const usersOf=j=>((j&&(Array.isArray(j)?j:j.users))||[]).filter(u=>u&&u.id&&u.name);
+function cacheUsers(){ try{localStorage.setItem('ncd_users',JSON.stringify(USERS))}catch(e){} }
+async function pinHash(id,pin){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(id+':'+pin)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+/* يضيف أو يعدّل مستخدم: على الجهاز دايمًا، وعلى السحابة لو الجهاز مربوط */
+async function upsertUser(u){
+  const put=(list,x)=>{ const i=list.findIndex(y=>y.id===x.id); if(i>=0) list[i]=x; else list.push(x); return list; };
+  if(TOKEN){ try{ const list=usersOf(await waitMax(ghRead('users.json'),7000)); const clean={...u}; delete clean.local; put(list,clean);
+      await waitMax(ghWrite('users.json',{users:list},'user: '+u.id),9000); USERS=list; cacheUsers(); setSync('ok'); return; }
+    catch(e){ setSync('err'); toast('اتحفظ على الجهاز ده، وهيترفع لما النت يرجع'); } }
+  put(USERS,{...u,local:true}); cacheUsers();
+}
+let FORM=null;
+function userForm(edit){
+  const u=edit?U:null; FORM={avatar:u?(u.avatar||AVATARS[0]):AVATARS[USERS.length%AVATARS.length],color:u?(u.color||COLORS[0]):COLORS[USERS.length%COLORS.length]};
+  const goal=u?(u.dailyGoal||50):50;
+  app.innerHTML='<div class="top"><button class="ghost" onclick="'+(edit?'profile()':'picker(true)')+'">→ رجوع</button><h2>'+(edit?'عدّل بياناتك':'مستخدم جديد')+'</h2></div>'+
+  '<form class="tip uform" onsubmit="event.preventDefault();submitUser('+(edit?'true':'false')+')">'+
+  '<span class="av xl" id="fav" style="--c:'+esc(FORM.color)+'">'+esc(FORM.avatar)+'</span>'+
+  '<label for="fname"><b>اسمك</b></label><input class="gsearch" id="fname" maxlength="20" value="'+esc(u?u.name:'')+'" placeholder="اكتب اسمك هنا" autocomplete="off">'+
+  '<b>اختار صورة</b><div class="pick">'+AVATARS.map(a=>'<button type="button" class="pk '+(a===FORM.avatar?'on':'')+'" onclick="setF(\'avatar\',\''+a+'\',this)">'+a+'</button>').join('')+'</div>'+
+  '<b>اختار لون</b><div class="pick">'+COLORS.map(c=>'<button type="button" class="pk col '+(c===FORM.color?'on':'')+'" style="background:'+c+'" aria-label="لون" onclick="setF(\'color\',\''+c+'\',this)"></button>').join('')+'</div>'+
+  '<label for="fgoal"><b>هدفك اليومي</b></label><select class="gsearch" id="fgoal">'+[[30,'خفيف: 30 نجمة في اليوم'],[50,'متوسط: 50 نجمة في اليوم'],[80,'جامد: 80 نجمة في اليوم']].map(g=>'<option value="'+g[0]+'" '+(g[0]===goal?'selected':'')+'>'+g[1]+'</option>').join('')+'</select>'+
+  '<label for="fpin"><b>رقم سري (اختياري)</b></label><input class="gsearch" id="fpin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="'+(u&&u.pin?'سيبه فاضي لو مش عايز تغيّره':'4 أرقام')+'">'+
+  '<small>لو كتبت رقم سري، هيتطلب كل ما حد يختار بروفايلك. من غيره أي حد على الجهاز يقدر يدخل عليه.</small>'+
+  '<div class="fb no" id="fmsg"></div><div class="row"><button class="primary" type="submit">'+(edit?'احفظ':'ابدأ الرحلة ←')+'</button></div>'+
+  (edit&&u.pin?'<button type="button" class="ghost full" style="margin-top:10px" onclick="removePin()">🔓 شيل الرقم السري</button>':'')+'</form>';
+  goTop();
+}
+function setF(k,v,el){ FORM[k]=v; el.parentNode.querySelectorAll('.pk').forEach(b=>b.classList.toggle('on',b===el)); const a=document.getElementById('fav'); a.textContent=FORM.avatar; a.style.setProperty('--c',FORM.color); }
+async function submitUser(edit){
+  const m=document.getElementById('fmsg'), name=document.getElementById('fname').value.trim().replace(/\s+/g,' '), pin=document.getElementById('fpin').value.trim(), goal=+document.getElementById('fgoal').value||50;
+  if(!name){ m.textContent='اكتب اسمك الأول.'; return; }
+  if(USERS.some(x=>x.name===name&&(!edit||x.id!==U.id))){ m.textContent='الاسم ده موجود قبل كده. لو ده انت، ارجع واختار بروفايلك.'; return; }
+  if(pin&&!/^\d{4}$/.test(pin)){ m.textContent='الرقم السري لازم يكون 4 أرقام بالظبط.'; return; }
+  m.className='fb'; m.textContent='⏳ بنحفظ…';
+  const u=edit?{...U}:{id:'u'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),examDate:null};
+  delete u.local; u.name=name; u.avatar=FORM.avatar; u.color=FORM.color; u.dailyGoal=goal;
+  if(pin) u.pin=await pinHash(u.id,pin);
+  await upsertUser(u);
+  if(edit){ U=USERS.find(x=>x.id===u.id)||u; toast('اتحفظ ✅'); profile(); } else pickUser(u.id);
+}
+async function removePin(){ const u={...U}; delete u.pin; delete u.local; await upsertUser(u); U=USERS.find(x=>x.id===u.id)||u; toast('الرقم السري اتشال'); profile(); }
+function enter(id){ const u=USERS.find(x=>x.id===id); if(u&&u.pin) pinScreen(id); else pickUser(id); }
+function pinScreen(id,msg){ const u=USERS.find(x=>x.id===id); if(!u) return picker(true);
+  app.innerHTML='<div class="top"><button class="ghost" onclick="picker(true)">→ رجوع</button><h2>🔒 دخول</h2></div>'+
+  '<form class="card" onsubmit="event.preventDefault();checkPin(\''+esc(id)+'\')"><span class="av xl" style="--c:'+esc(u.color||'#0f6b5c')+'">'+esc(u.avatar||'🙂')+'</span><div class="say">'+esc(u.name)+'</div>'+
+  '<label for="pin" class="src" style="display:block">اكتب رقمك السري</label><input class="gsearch pinin" id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off">'+
+  '<div class="fb no" id="pmsg">'+(msg||'')+'</div><div class="row"><button class="primary" type="submit">ادخل ←</button></div>'+
+  '<div class="src">نسيت الرقم؟ صاحب التول يقدر يشيله من ملف users.json في ريبو البيانات.</div></form>';
+  goTop(); const i=document.getElementById('pin'); if(i) i.focus(); }
+async function checkPin(id){ const u=USERS.find(x=>x.id===id), v=document.getElementById('pin').value.trim(); if(u&&v&&await pinHash(id,v)===u.pin) pickUser(id); else pinScreen(id,'الرقم مش صح. جرّب تاني.'); }
 async function boot(){
-  let got=false;
-  if(TOKEN){ try{ const j=await waitMax(ghRead('users.json'),6000), list=((j&&(Array.isArray(j)?j:j.users))||[]).filter(u=>u&&u.id&&u.name); if(list.length){ USERS=list; got=true; } setSync('ok'); }catch(e){ setSync('err'); } }
-  if(!got) try{ const r=await Promise.race([fetch('users.json',{cache:'no-store'}), new Promise((_,j)=>setTimeout(j,3000))]);
-    if(r.ok){ const j=await r.json(), list=(Array.isArray(j)?j:j.users||[]).filter(u=>u&&u.id&&u.name); if(list.length) USERS=list; } }catch(e){}
+  let got=false, cache=[]; try{cache=usersOf(JSON.parse(localStorage.getItem('ncd_users')||'[]'))}catch(e){}
+  if(TOKEN){ try{ const list=usersOf(await waitMax(ghRead('users.json'),6000));
+      /* مستخدمين اتسجلوا أو اتعدّلوا على الجهاز ده من غير نت: نرفعهم */
+      const pend=cache.filter(u=>u.local); pend.forEach(u=>{ const c={...u}; delete c.local; const i=list.findIndex(y=>y.id===c.id); if(i>=0) list[i]=c; else list.push(c); });
+      if(pend.length) await waitMax(ghWrite('users.json',{users:list},'users: sync'),9000);
+      if(list.length){ USERS=list; got=true; } setSync('ok'); }catch(e){ setSync('err'); } }
+  if(!got){ if(cache.length) USERS=cache; else try{ const r=await waitMax(fetch('users.json',{cache:'no-store'}),3000); if(r.ok){ const list=usersOf(await r.json()); if(list.length) USERS=list; } }catch(e){} }
+  cacheUsers();
   let cur=null; try{cur=localStorage.getItem('ncd_current')}catch(e){}
   if(cur&&USERS.find(u=>u.id===cur)) pickUser(cur); else picker();
 }
