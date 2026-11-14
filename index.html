@@ -163,6 +163,7 @@
   .pk{min-height:0;width:48px;height:48px;padding:0;font-size:26px;line-height:1;background:#fff;border:2px solid var(--line);border-radius:14px}
   .pk.on{border-color:var(--accent);box-shadow:0 0 0 3px var(--soft)}.pk.col{border-radius:50%;border-color:transparent}.pk.col.on{border-color:#fff;box-shadow:0 0 0 3px var(--ink)}
   .pinin{margin:10px auto 0;max-width:200px;display:block;text-align:center;font-size:26px;letter-spacing:.35em;direction:ltr}
+  .top .hb{flex:none;padding:8px 12px;font-size:22px;line-height:1}
   .gain{font-size:17px;font-weight:700;color:var(--accent);background:var(--soft);border-radius:12px;padding:8px 10px;margin-top:10px}
   button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   @media (prefers-reduced-motion: reduce){.toast,.celc .e,.blink{animation:none}}
@@ -2157,6 +2158,7 @@ function profile(askReset){
     <div class="row"><button class="ghost" onclick="profile()">لأ، سيبه</button><button class="primary" style="background:var(--bad)" onclick="resetMe()">أيوه، امسح</button></div></div>`:''}`;
   if(askReset){ const r=document.getElementById('rst'); if(r) r.scrollIntoView({block:'center'}); } else goTop();
 }
+function goHome(){ clearInterval(timer); stopGame(); home(); }
 function resetMe(){ P=blankP(); seen=P.seen; saveP(); toast('اتمسح التقدّم'); home(); }
 /* ---------- تسجيل مستخدم جديد + رقم سري اختياري ---------- */
 const AVATARS=['🧔','👩','👦','👧','👨','🧕','👴','👵','🧑','👱','🧒','🚗'];
@@ -2296,7 +2298,7 @@ function tips(){
 let curGroup=null;
 function openGroup(id){
   curGroup=id; const g=G(id); saveLast(id,null);
-  app.innerHTML = `<div class="top"><button class="ghost" onclick="openChapter(${g.ch})">→ الفصل ${g.ch}</button><h2>${g.ar}</h2></div>
+  app.innerHTML = `<div class="top"><button class="ghost" onclick="openChapter(${g.ch})">→ الفصل ${g.ch}</button><h2>${g.ar}</h2><button class="ghost hb" onclick="goHome()" aria-label="الصفحة الرئيسية" title="الصفحة الرئيسية">🏠</button></div>
   <div class="intro">${g.intro}</div>
   <button class="primary full" onclick="startQuiz('${id}')">📝 امتحني في الجروب ده</button>
   <div class="grid">${g.signs.map((s,k)=>`<button class="tile ${seen[s.key||s.id]?'seen':''}" onclick="openCard('${id}',${k})">
@@ -2309,7 +2311,7 @@ function openCard(gid,k){
   const g=G(gid), s=g.signs[k]; markSeen(s.key||s.id); saveLast(gid,k);
   const prev = k>0 ? `<button class="ghost" onclick="openCard('${gid}',${k-1})">→ اللي قبلها</button>`:'';
   const next = k<g.signs.length-1 ? `<button class="primary" onclick="openCard('${gid}',${k+1})">اللي بعدها ←</button>`:`<button class="primary" onclick="startQuiz('${gid}')">🎉 خلّصت! امتحن نفسك ←</button>`;
-  app.innerHTML = `<div class="top"><button class="ghost" onclick="openGroup('${gid}')">→ رجوع للجروب</button><h2>كارت ${k+1} من ${g.signs.length}</h2></div>
+  app.innerHTML = `<div class="top"><button class="ghost" onclick="openGroup('${gid}')">→ رجوع للجروب</button><h2>كارت ${k+1} من ${g.signs.length}</h2><button class="ghost hb" onclick="goHome()" aria-label="الصفحة الرئيسية" title="الصفحة الرئيسية">🏠</button></div>
   <div class="qbar"><i style="width:${g.signs.filter(x=>seen[x.key||x.id]).length/g.signs.length*100}%"></i></div>
   <div class="card">
     <img class="big ${s.wide?'wide':''} ${s.blink?'blink':''}" src="${IMG[s.id]}" alt="">
@@ -2386,7 +2388,7 @@ function oText(o){
 }
 function showQ(keep){
   const x=Q[qi];
-  app.innerHTML = `<div class="top"><button class="ghost" onclick="backFromQuiz()">→ خروج</button><h2>سؤال ${qi+1} من ${Q.length}</h2>${EXAM?`<span class="tmr">⏱️ <b id="tmr">${fmt(tLeft)}</b></span>`:''}</div>
+  app.innerHTML = `<div class="top"><button class="ghost" onclick="backFromQuiz()">→ خروج</button><h2>سؤال ${qi+1} من ${Q.length}</h2>${EXAM?`<span class="tmr">⏱️ <b id="tmr">${fmt(tLeft)}</b></span>`:''}<button class="ghost hb" onclick="goHome()" aria-label="الصفحة الرئيسية" title="الصفحة الرئيسية">🏠</button></div>
   <div class="qbar"><i style="width:${(qi)/Q.length*100}%"></i></div>
   ${langBar()}
   <div class="card">
